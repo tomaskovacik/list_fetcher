@@ -1,0 +1,2 @@
+[console_scripts]
+list-fetcher = list_fetcher.cli:main

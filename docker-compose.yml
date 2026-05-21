@@ -1,0 +1,37 @@
+services:
+  download:
+    build:
+      context: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+      - ./config:/config
+    command: ["/app/docker/export.sh"]
+
+  restore:
+    build:
+      context: .
+    profiles: ["tools"]
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+      - ./config:/config
+    command: ["/app/docker/restore.sh"]
+
+  certgen:
+    build:
+      context: .
+    profiles: ["tools"]
+    env_file:
+      - .env
+    environment:
+      LIST_FETCHER_CERT_OUTPUT_DIR: ${LIST_FETCHER_CERT_OUTPUT_DIR:-/certs}
+      LIST_FETCHER_CERT_NAME: ${LIST_FETCHER_CERT_NAME:-sharepoint-app}
+      LIST_FETCHER_CERT_COMMON_NAME: ${LIST_FETCHER_CERT_COMMON_NAME:-list-fetcher}
+      LIST_FETCHER_CERT_DAYS: ${LIST_FETCHER_CERT_DAYS:-825}
+      LIST_FETCHER_CERT_FORCE: ${LIST_FETCHER_CERT_FORCE:-false}
+    volumes:
+      - ./certs:/certs
+    command: ["/app/docker/cert_tool.sh"]

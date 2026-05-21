@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.swp
+.*.swp
+.venv/
+.env
+dist/
+build/
+certs/
+config/*.pem
+config/*.key
+config/*.cer
+config/*.crt
+data/

@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: list-fetcher
+Version: 0.1.0
+Summary: Export SharePoint Online lists with schema for backup and later restore work.
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: msal>=1.28.0
+Requires-Dist: requests>=2.32.0
+Dynamic: license-file
