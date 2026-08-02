@@ -12,7 +12,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN pip install --no-cache-dir .
+RUN pip install --only-binary :all: --no-cache-dir .
 
 COPY docker /app/docker
 RUN chmod +x /app/docker/export.sh /app/docker/restore.sh /app/docker/cert_tool.sh
