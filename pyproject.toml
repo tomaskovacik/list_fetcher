@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "list-fetcher"
-version = "0.3.1"
+version = "0.3.2"
 description = "Export SharePoint Online lists with schema for backup and later restore work."
 requires-python = ">=3.10"
 dependencies = [
