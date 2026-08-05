@@ -285,23 +285,33 @@ class SharePointExporter:
         write_json(output_dir / MANIFEST_FILENAME, manifest)
         return manifest
 
-    def _remove_stale_list_dirs(self, site_dir: Path, list_id: str, current_list_dir: Path) -> None:
-        if not site_dir.is_dir():
-            return
-        suffix = f"[{list_id}]"
-        for entry in site_dir.iterdir():
-            if entry == current_list_dir or not entry.is_dir() or not entry.name.endswith(suffix):
-                continue
-            _ensure_within(site_dir, entry)
-            self._status(f"  Removing stale export directory from a previous list title: {entry.name}")
-            shutil.rmtree(entry)
+    def _resolve_list_dir(self, site_dir: Path, target: ResolvedList) -> Path:
+        # SharePoint's Title can vary per request (multilingual title resources
+        # depend on the caller's language context), so an export directory once
+        # created for a list_id is reused as-is rather than re-derived from the
+        # current title on every run - that would delete and recreate it on every
+        # export purely due to locale flapping, not an actual rename.
+        suffix = f"[{target.list_id}]"
+        existing: list[Path] = []
+        if site_dir.is_dir():
+            existing = sorted(
+                (entry for entry in site_dir.iterdir() if entry.is_dir() and entry.name.endswith(suffix)),
+                key=lambda entry: entry.name,
+            )
+        if existing:
+            canonical, *duplicates = existing
+            for duplicate in duplicates:
+                _ensure_within(site_dir, duplicate)
+                self._status(f"  Removing duplicate export directory for the same list: {duplicate.name}")
+                shutil.rmtree(duplicate)
+            return canonical
+        return site_dir / safe_path_component(f"{target.title} [{target.list_id}]")
 
     def export_list(self, target: ResolvedList, output_dir: Path) -> dict[str, Any]:
         site_slug = host_and_site_slug(target.site_url)
         site_dir = output_dir / site_slug
-        list_dir = site_dir / safe_path_component(f"{target.title} [{target.list_id}]")
+        list_dir = self._resolve_list_dir(site_dir, target)
         _ensure_within(output_dir, list_dir)
-        self._remove_stale_list_dirs(site_dir, target.list_id, list_dir)
         attachment_dir = list_dir / "attachments"
         attachment_dir.mkdir(parents=True, exist_ok=True)
 

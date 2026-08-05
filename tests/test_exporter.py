@@ -121,7 +121,10 @@ class ExporterTests(unittest.TestCase):
         self.assertTrue(any("Retrieved list 'Invoices'" in message for message in messages))
         self.assertTrue(any("Saved list 'Invoices'" in message for message in messages))
 
-    def test_export_removes_stale_dir_from_previous_list_title(self) -> None:
+    def test_export_reuses_existing_dir_despite_title_changing(self) -> None:
+        # SharePoint Title can vary per request (multilingual title resources),
+        # so a title difference alone must not cause the export directory to be
+        # deleted and recreated under the "new" title on every run.
         exporter = SharePointExporter(FakeClient())
         target = ResolvedList(
             site_url="https://contoso.sharepoint.com/sites/finance",
@@ -136,17 +139,44 @@ class ExporterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
             site_dir = output_dir / "contoso.sharepoint.com__sites__finance"
-            stale_dir = site_dir / "Old Invoices Name [list-guid]"
-            (stale_dir / "attachments").mkdir(parents=True)
-            (stale_dir / "list.json").write_text("stale", encoding="utf-8")
+            previously_named_dir = site_dir / "Faktury [list-guid]"
+            (previously_named_dir / "attachments").mkdir(parents=True)
+            (previously_named_dir / "list.json").write_text("stale", encoding="utf-8")
             unrelated_dir = site_dir / "Unrelated List [other-guid]"
-            (unrelated_dir).mkdir(parents=True)
+            unrelated_dir.mkdir(parents=True)
 
             exporter.export([target], output_dir)
 
-            self.assertFalse(stale_dir.exists())
+            self.assertTrue(previously_named_dir.exists())
             self.assertTrue(unrelated_dir.exists())
-            self.assertTrue((site_dir / "Invoices [list-guid]" / "list.json").exists())
+            self.assertFalse((site_dir / "Invoices [list-guid]").exists())
+            self.assertNotEqual((previously_named_dir / "list.json").read_text(encoding="utf-8"), "stale")
+
+    def test_export_deduplicates_pre_existing_duplicate_dirs(self) -> None:
+        exporter = SharePointExporter(FakeClient())
+        target = ResolvedList(
+            site_url="https://contoso.sharepoint.com/sites/finance",
+            list_id="list-guid",
+            title="Invoices",
+            server_relative_url="/sites/finance/Lists/Invoices",
+            hidden=False,
+            base_template=100,
+            item_count=2,
+            metadata={},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            site_dir = output_dir / "contoso.sharepoint.com__sites__finance"
+            first_dir = site_dir / "Faktury [list-guid]"
+            second_dir = site_dir / "Invoices [list-guid]"
+            (first_dir / "attachments").mkdir(parents=True)
+            (second_dir / "attachments").mkdir(parents=True)
+
+            exporter.export([target], output_dir)
+
+            # The alphabetically-first duplicate is kept as canonical.
+            self.assertTrue(first_dir.exists())
+            self.assertFalse(second_dir.exists())
 
     def test_restore_recreates_list_items_and_attachments(self) -> None:
         messages: list[str] = []
