@@ -26,10 +26,12 @@ jobs:
         uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
 
       - name: Install dependencies
-        run: uv sync --locked
+        run: |
+          uv sync --locked --no-install-project --no-build
+          uv sync --locked
 
       - name: Run unit tests
-        run: uv run python -m unittest discover -s tests -q
+        run: uv run --no-sync python -m unittest discover -s tests -q
 
   docker:
     name: Build Docker image

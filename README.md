@@ -35,6 +35,27 @@ Arguments can be passed directly or via environment variables:
 
 The CLI prints status lines during site discovery, export, and restore so you can see which site and list is currently being processed.
 
+Find list ids without downloading anything, e.g. to get an id for `--exclude-list-id`:
+
+```bash
+list-fetcher \
+  --site-url https://contoso.sharepoint.com/sites/finance \
+  --tenant 11111111-2222-3333-4444-555555555555 \
+  --client-id 00000000-0000-0000-0000-000000000000 \
+  --cert-path ./sharepoint-app-key.pem \
+  --cert-thumbprint ABCDEF0123456789ABCDEF0123456789ABCDEF01 \
+  --dry-run
+```
+
+```
+LIST ID                               TITLE             HIDDEN  PATH
+ad3deed7-2be4-4879-aa75-ae4934b67402  CARS DB           no      /sites/finance/Lists/CarsDB
+8d522de2-c837-4013-a1aa-982eb34db7b5  Form Templates    yes     /sites/finance/Lists/Templates
+2 list(s) matched (dry run, nothing downloaded)
+```
+
+`--dry-run` respects `--include-hidden` and `--exclude-list-id`/`--exclude-list-ids-file`, so you can also use it to confirm an exclusion list works before running a real export. `--output` is not required with `--dry-run`.
+
 Discover and export all visible lists from a site:
 
 ```bash
@@ -58,6 +79,21 @@ list-fetcher \
   --cert-thumbprint ABCDEF0123456789ABCDEF0123456789ABCDEF01 \
   --output ./backup
 ```
+
+Exclude specific lists from discovery and export by id (GUID), not title - SharePoint's `Title` can vary per request language (see [Notes](#notes)), so name-based exclusion would be unreliable:
+
+```bash
+list-fetcher \
+  --site-url https://contoso.sharepoint.com/sites/finance \
+  --tenant 11111111-2222-3333-4444-555555555555 \
+  --client-id 00000000-0000-0000-0000-000000000000 \
+  --cert-path ./sharepoint-app-key.pem \
+  --cert-thumbprint ABCDEF0123456789ABCDEF0123456789ABCDEF01 \
+  --output ./backup \
+  --exclude-list-id ad3deed7-2be4-4879-aa75-ae4934b67402
+```
+
+`--exclude-list-id` is repeatable; `--exclude-list-ids-file` points to a text file with one list id per line (`#` comments and blank lines are skipped).
 
 Use certificate auth:
 
@@ -111,6 +147,12 @@ Restore run:
 docker compose --profile tools run --rm restore
 ```
 
+Find list ids without downloading anything (auth and site URLs are already picked up from `.env` via `env_file`):
+
+```bash
+docker compose run --rm --entrypoint list-fetcher download --dry-run --site-url https://contoso.sharepoint.com/sites/finance
+```
+
 Generate a certificate/key pair for SharePoint app-only auth:
 
 ```bash
@@ -127,7 +169,7 @@ This writes files into `./certs` in the current directory:
 Host paths (configurable, see below):
 
 - `./data` is mounted to `/data` for exports and restore input
-- `./config` is mounted to `/config` for list URL files and certificate files
+- `./config` is mounted to `/config` for list URL files, list id exclusion files, and certificate files
 - `./certs` is mounted to `/certs` for the `certgen` service
 
 Common `.env` values:
@@ -141,6 +183,8 @@ Common `.env` values:
 - `LIST_FETCHER_CERT_COMMON_NAME` - certificate subject CN
 - `LIST_FETCHER_CERT_DAYS` - certificate validity period
 - `LIST_FETCHER_CERT_FORCE` - overwrite existing files when `true`
+- `LIST_FETCHER_EXCLUDE_LIST_IDS` - comma or newline separated list ids (GUIDs) to exclude from discovery/export
+- `LIST_FETCHER_EXCLUDE_LIST_IDS_FILE` - optional file such as `/config/exclude-list-ids.txt`
 
 Host directory and user overrides (Compose only):
 
@@ -171,6 +215,7 @@ list-fetcher \
 ## Notes
 
 - Hidden lists are skipped by default. Use `--include-hidden` to include them.
+- SharePoint's list `Title` can vary per request depending on the caller's language context (multilingual title resources), even with no actual rename. Export directory names are chosen once per list id and then reused on later runs, and list exclusion (`--exclude-list-id`) is matched by id for the same reason - don't rely on title matching anything to stay stable across runs.
 - The file input accepts common browser list URLs such as `/Lists/.../AllItems.aspx` and document library URLs such as `/Shared%20Documents/Forms/AllItems.aspx`.
 - Item attachments are downloaded for classic lists. Document library files are represented as list items; they are not downloaded through the attachment path.
 - For Compose, create `./data`, `./config`, and `./certs` on the host if they do not already exist, and make sure they are writable by the `PUID`/`PGID` you configure (default `1000:1000`).

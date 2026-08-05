@@ -115,3 +115,14 @@ def load_list_targets_file(path: Path) -> list[ListTarget]:
             continue
         targets.append(parse_list_target(stripped))
     return targets
+
+
+def load_list_ids_file(path: Path) -> set[str]:
+    resolved_path = require_file(path, label="List id exclusions file")
+    ids: set[str] = set()
+    for line in resolved_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        ids.add(stripped.lower())
+    return ids

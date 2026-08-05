@@ -206,10 +206,12 @@ class SharePointExporter:
         self,
         client: SharePointRestClient,
         include_hidden: bool = False,
+        exclude_list_ids: set[str] | None = None,
         status: Callable[[str], None] | None = None,
     ):
         self._client = client
         self._include_hidden = include_hidden
+        self._exclude_list_ids = {value.strip().lower() for value in (exclude_list_ids or set()) if value.strip()}
         self._status_callback = status or (lambda _message: None)
 
     def _status(self, message: str) -> None:
@@ -222,8 +224,13 @@ class SharePointExporter:
             "/_api/web/lists?$select=Id,Title,Hidden,ItemCount,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder",
         )
         result: list[ResolvedList] = []
+        excluded_titles: list[str] = []
         for item in payload:
             if item.get("Hidden") and not self._include_hidden:
+                continue
+            list_id = item["Id"]
+            if list_id.lower() in self._exclude_list_ids:
+                excluded_titles.append(item.get("Title") or list_id)
                 continue
             server_relative_url = item.get("RootFolder", {}).get("ServerRelativeUrl")
             if not server_relative_url:
@@ -231,8 +238,8 @@ class SharePointExporter:
             result.append(
                 ResolvedList(
                     site_url=site_url,
-                    list_id=item["Id"],
-                    title=item.get("Title") or item["Id"],
+                    list_id=list_id,
+                    title=item.get("Title") or list_id,
                     server_relative_url=server_relative_url,
                     hidden=bool(item.get("Hidden")),
                     base_template=item.get("BaseTemplate"),
@@ -243,6 +250,8 @@ class SharePointExporter:
         self._status(f"Found {len(result)} visible lists in {site_url}")
         for item in sorted(result, key=lambda current: current.title.lower()):
             self._status(f"  - {item.title} ({item.server_relative_url})")
+        for title in sorted(excluded_titles, key=str.lower):
+            self._status(f"  - excluded '{title}' by list id")
         return result
 
     def resolve_targets(self, targets: list[ListTarget]) -> list[ResolvedList]:

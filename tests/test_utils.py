@@ -10,6 +10,7 @@ from list_fetcher.utils import (
     derive_list_path_from_url,
     discover_site_url,
     load_dotenv,
+    load_list_ids_file,
     load_list_targets_file,
     parse_list_target,
     safe_path_component,
@@ -54,6 +55,13 @@ class UrlParsingTests(unittest.TestCase):
             targets = load_list_targets_file(path)
         self.assertEqual(len(targets), 1)
         self.assertEqual(targets[0].list_path, "/sites/finance/Lists/Invoices")
+
+    def test_load_list_ids_file_lowercases_and_skips_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "exclude.txt"
+            path.write_text("# comment\n\nAD3DEED7-2BE4-4879-AA75-AE4934B67402\n other-guid \n", encoding="utf-8")
+            ids = load_list_ids_file(path)
+        self.assertEqual(ids, {"ad3deed7-2be4-4879-aa75-ae4934b67402", "other-guid"})
 
     def test_slugify_keeps_useful_ascii(self) -> None:
         self.assertEqual(slugify("Finance / Invoices 2026"), "Finance-Invoices-2026")

@@ -36,6 +36,16 @@ class FakeClient:
         return b"pdf"
 
 
+class FakeDiscoveryClient:
+    def get_paged(self, site_url: str, relative_api_url: str):  # noqa: ANN201
+        if relative_api_url.startswith("/_api/web/lists?"):
+            return [
+                {"Id": "list-guid-1", "Title": "Invoices", "Hidden": False, "ItemCount": 2, "BaseTemplate": 100, "RootFolder": {"ServerRelativeUrl": "/sites/finance/Lists/Invoices"}},
+                {"Id": "list-guid-2", "Title": "CARS DB", "Hidden": False, "ItemCount": 1, "BaseTemplate": 100, "RootFolder": {"ServerRelativeUrl": "/sites/finance/Lists/CarsDB"}},
+            ]
+        raise AssertionError(relative_api_url)
+
+
 class FakeRestoreClient:
     def __init__(self, existing: bool = False) -> None:
         self.existing = existing
@@ -90,6 +100,13 @@ class ExporterTests(unittest.TestCase):
         targets = exporter.resolve_targets([ListTarget(site_url="https://contoso.sharepoint.com/sites/finance", list_path="/sites/finance/Lists/Invoices", source="file")])
         self.assertEqual(len(targets), 1)
         self.assertEqual(targets[0].server_relative_url, "/sites/finance/Lists/Invoices")
+
+    def test_discover_lists_excludes_by_id_case_insensitively(self) -> None:
+        messages: list[str] = []
+        exporter = SharePointExporter(FakeDiscoveryClient(), exclude_list_ids={"LIST-GUID-2"}, status=messages.append)
+        discovered = exporter.discover_lists("https://contoso.sharepoint.com/sites/finance")
+        self.assertEqual([item.list_id for item in discovered], ["list-guid-1"])
+        self.assertTrue(any("excluded 'CARS DB'" in message for message in messages))
 
     def test_export_writes_manifest_and_attachments(self) -> None:
         messages: list[str] = []
