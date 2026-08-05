@@ -4,7 +4,8 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    HOME=/app
 
 WORKDIR /app
 
@@ -27,4 +28,7 @@ RUN groupadd --gid 1000 appuser \
     && mkdir -p /certs \
     && chown -R appuser:appuser /app /certs
 
+# Default runtime identity is 1000:1000. Override per-container with PUID/PGID
+# (see docker-compose.yml's `user:` field and .env.example) to match the
+# ownership of bind-mounted host directories; no rebuild required.
 USER appuser

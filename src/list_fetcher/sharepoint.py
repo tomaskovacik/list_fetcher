@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -284,10 +285,23 @@ class SharePointExporter:
         write_json(output_dir / MANIFEST_FILENAME, manifest)
         return manifest
 
+    def _remove_stale_list_dirs(self, site_dir: Path, list_id: str, current_list_dir: Path) -> None:
+        if not site_dir.is_dir():
+            return
+        suffix = f"[{list_id}]"
+        for entry in site_dir.iterdir():
+            if entry == current_list_dir or not entry.is_dir() or not entry.name.endswith(suffix):
+                continue
+            _ensure_within(site_dir, entry)
+            self._status(f"  Removing stale export directory from a previous list title: {entry.name}")
+            shutil.rmtree(entry)
+
     def export_list(self, target: ResolvedList, output_dir: Path) -> dict[str, Any]:
         site_slug = host_and_site_slug(target.site_url)
-        list_dir = output_dir / site_slug / safe_path_component(f"{target.title} [{target.list_id}]")
+        site_dir = output_dir / site_slug
+        list_dir = site_dir / safe_path_component(f"{target.title} [{target.list_id}]")
         _ensure_within(output_dir, list_dir)
+        self._remove_stale_list_dirs(site_dir, target.list_id, list_dir)
         attachment_dir = list_dir / "attachments"
         attachment_dir.mkdir(parents=True, exist_ok=True)
 

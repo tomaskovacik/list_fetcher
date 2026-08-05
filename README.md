@@ -121,10 +121,11 @@ This writes files into `./certs` in the current directory:
 - `<name>-cert.cer` - DER form of the same public certificate
 - `<name>-cert-info.txt` - thumbprint and next-step notes
 
-Host paths:
+Host paths (configurable, see below):
 
 - `./data` is mounted to `/data` for exports and restore input
 - `./config` is mounted to `/config` for list URL files and certificate files
+- `./certs` is mounted to `/certs` for the `certgen` service
 
 Common `.env` values:
 
@@ -137,6 +138,13 @@ Common `.env` values:
 - `LIST_FETCHER_CERT_COMMON_NAME` - certificate subject CN
 - `LIST_FETCHER_CERT_DAYS` - certificate validity period
 - `LIST_FETCHER_CERT_FORCE` - overwrite existing files when `true`
+
+Host directory and user overrides (Compose only):
+
+- `LIST_FETCHER_DATA_DIR` - host directory bind-mounted to `/data`, default `./data`
+- `LIST_FETCHER_CONFIG_DIR` - host directory bind-mounted to `/config`, default `./config`
+- `LIST_FETCHER_CERTS_DIR` - host directory bind-mounted to `/certs`, default `./certs`
+- `PUID` / `PGID` - user and group id the container runs as, default `1000`/`1000`. Set these to match the owner of the host directories above (e.g. your own `id -u`/`id -g`) if they differ from the image default; no image rebuild is needed.
 
 Restore one exported list into a different target site:
 
@@ -162,4 +170,4 @@ list-fetcher \
 - Hidden lists are skipped by default. Use `--include-hidden` to include them.
 - The file input accepts common browser list URLs such as `/Lists/.../AllItems.aspx` and document library URLs such as `/Shared%20Documents/Forms/AllItems.aspx`.
 - Item attachments are downloaded for classic lists. Document library files are represented as list items; they are not downloaded through the attachment path.
-- For Compose, create `./data` and `./config` on the host if they do not already exist.
+- For Compose, create `./data`, `./config`, and `./certs` on the host if they do not already exist, and make sure they are writable by the `PUID`/`PGID` you configure (default `1000:1000`).
