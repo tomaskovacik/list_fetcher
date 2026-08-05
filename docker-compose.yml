@@ -1,7 +1,6 @@
 services:
   download:
-    build:
-      context: .
+    image: ghcr.io/tomaskovacik/list_fetcher:${LIST_FETCHER_IMAGE_TAG:-latest}
     env_file:
       - .env
     user: "${PUID:-1000}:${PGID:-1000}"
@@ -11,8 +10,7 @@ services:
     command: ["/app/docker/export.sh"]
 
   restore:
-    build:
-      context: .
+    image: ghcr.io/tomaskovacik/list_fetcher:${LIST_FETCHER_IMAGE_TAG:-latest}
     profiles: ["tools"]
     env_file:
       - .env
@@ -23,8 +21,7 @@ services:
     command: ["/app/docker/restore.sh"]
 
   certgen:
-    build:
-      context: .
+    image: ghcr.io/tomaskovacik/list_fetcher:${LIST_FETCHER_IMAGE_TAG:-latest}
     profiles: ["tools"]
     env_file:
       - .env

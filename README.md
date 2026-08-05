@@ -86,6 +86,7 @@ list-fetcher \
 
 The repository includes a `Dockerfile` and `docker-compose.yml`.
 
+- `docker-compose.yml` pulls the pre-built image from `ghcr.io/tomaskovacik/list_fetcher` (published by CI on every push and release tag) rather than building locally
 - `download` is the default service and runs the export flow
 - `restore` is in the `tools` profile, so it does not start unless requested
 - all runtime configuration is read from `.env`
@@ -99,8 +100,10 @@ cp .env.example .env
 Default export run:
 
 ```bash
-docker compose up --build download
+docker compose up download
 ```
+
+Pin a specific release instead of `latest` by setting `LIST_FETCHER_IMAGE_TAG` in `.env` (e.g. `0.3.0`), then `docker compose pull` to fetch it.
 
 Restore run:
 
