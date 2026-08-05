@@ -21,13 +21,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
 
       - name: Install dependencies
-        run: pip install --only-binary :all: .
+        run: uv sync --locked
 
       - name: Run unit tests
-        run: python -m unittest discover -s tests -q
+        run: uv run python -m unittest discover -s tests -q
 
   docker:
     name: Build Docker image

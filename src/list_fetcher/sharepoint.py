@@ -12,7 +12,32 @@ import msal
 import requests
 
 from .models import AuthConfig, ListTarget
-from .utils import host_and_site_slug, safe_path_component, write_json
+from .utils import host_and_site_slug, require_file, safe_path_component, write_json
+
+MANIFEST_FILENAME = "manifest.json"
+LIST_FILENAME = "list.json"
+FIELDS_FILENAME = "fields.json"
+CONTENT_TYPES_FILENAME = "content_types.json"
+ITEMS_FILENAME = "items.ndjson"
+ATTACHMENTS_FILENAME = "attachments.json"
+
+
+def _build_request_url(site_url: str, relative_api_url: str) -> str:
+    if not relative_api_url.startswith("/") or relative_api_url.startswith("//") or "://" in relative_api_url:
+        raise ValueError(f"Refusing to request malformed relative API URL: {relative_api_url!r}")
+    base = site_url.rstrip("/")
+    parts = urlsplit(base)
+    if parts.scheme != "https" or not parts.netloc:
+        raise ValueError(f"Refusing to request non-https or malformed site URL: {site_url!r}")
+    return f"{base}{relative_api_url}"
+
+
+def _ensure_within(base: Path, candidate: Path) -> Path:
+    resolved_base = base.resolve()
+    resolved_candidate = candidate.resolve()
+    if resolved_candidate != resolved_base and resolved_base not in resolved_candidate.parents:
+        raise ValueError(f"Refusing to access path outside {resolved_base}: {resolved_candidate}")
+    return resolved_candidate
 
 
 @dataclass(frozen=True)
@@ -50,7 +75,9 @@ class EntraTokenProvider:
                 authority=authority,
                 client_credential={
                     "thumbprint": self._auth.cert_thumbprint,
-                    "private_key": Path(self._auth.cert_path or "").read_text(encoding="utf-8"),
+                    "private_key": require_file(Path(self._auth.cert_path or ""), label="Certificate path").read_text(
+                        encoding="utf-8"
+                    ),
                 },
             )
             self._apps[origin] = app
@@ -93,7 +120,7 @@ class SharePointRestClient:
             request_headers.update(headers)
         response = self._session.request(
             method,
-            f"{site_url.rstrip('/')}{relative_api_url}",
+            _build_request_url(site_url, relative_api_url),
             headers=request_headers,
             stream=stream,
             json=json_payload,
@@ -242,6 +269,7 @@ class SharePointExporter:
         return list(deduped.values())
 
     def export(self, targets: list[ResolvedList], output_dir: Path) -> dict[str, Any]:
+        output_dir = output_dir.expanduser().resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         ordered_targets = sorted(targets, key=lambda i: (i.site_url, i.title.lower()))
         exported: list[dict[str, Any]] = []
@@ -253,12 +281,13 @@ class SharePointExporter:
             "list_count": len(exported),
             "lists": exported,
         }
-        write_json(output_dir / "manifest.json", manifest)
+        write_json(output_dir / MANIFEST_FILENAME, manifest)
         return manifest
 
     def export_list(self, target: ResolvedList, output_dir: Path) -> dict[str, Any]:
         site_slug = host_and_site_slug(target.site_url)
         list_dir = output_dir / site_slug / safe_path_component(f"{target.title} [{target.list_id}]")
+        _ensure_within(output_dir, list_dir)
         attachment_dir = list_dir / "attachments"
         attachment_dir.mkdir(parents=True, exist_ok=True)
 
@@ -271,12 +300,12 @@ class SharePointExporter:
             f"  Retrieved list '{target.title}': {len(fields)} fields, {len(content_types)} content types, {len(items)} items"
         )
 
-        write_json(list_dir / "list.json", list_data)
-        write_json(list_dir / "fields.json", fields)
-        write_json(list_dir / "content_types.json", content_types)
+        write_json(list_dir / LIST_FILENAME, list_data)
+        write_json(list_dir / FIELDS_FILENAME, fields)
+        write_json(list_dir / CONTENT_TYPES_FILENAME, content_types)
 
         attachments_manifest: list[dict[str, Any]] = []
-        with (list_dir / "items.ndjson").open("w", encoding="utf-8") as handle:
+        with (list_dir / ITEMS_FILENAME).open("w", encoding="utf-8") as handle:
             for item in items:
                 handle.write(json.dumps(dict(item), ensure_ascii=False, sort_keys=True) + "\n")
                 if not item.get("Attachments"):
@@ -294,6 +323,7 @@ class SharePointExporter:
                         f"{list_api}/Items({item_id})/AttachmentFiles('{quote(file_name, safe='')}')/$value",
                     )
                     target_path = item_attachment_dir / file_name
+                    _ensure_within(item_attachment_dir, target_path)
                     target_path.write_bytes(binary)
                     attachments_manifest.append(
                         {
@@ -304,7 +334,7 @@ class SharePointExporter:
                         }
                     )
 
-        write_json(list_dir / "attachments.json", attachments_manifest)
+        write_json(list_dir / ATTACHMENTS_FILENAME, attachments_manifest)
         self._status(f"  Saved list '{target.title}' to {list_dir}")
         self._status(f"  Downloaded {len(attachments_manifest)} attachments for '{target.title}'")
         list_manifest = {
@@ -316,15 +346,15 @@ class SharePointExporter:
             "item_count": len(items),
             "attachment_count": len(attachments_manifest),
             "paths": {
-                "list": "list.json",
-                "fields": "fields.json",
-                "content_types": "content_types.json",
-                "items": "items.ndjson",
-                "attachments": "attachments.json",
+                "list": LIST_FILENAME,
+                "fields": FIELDS_FILENAME,
+                "content_types": CONTENT_TYPES_FILENAME,
+                "items": ITEMS_FILENAME,
+                "attachments": ATTACHMENTS_FILENAME,
                 "attachment_root": "attachments",
             },
         }
-        write_json(list_dir / "manifest.json", list_manifest)
+        write_json(list_dir / MANIFEST_FILENAME, list_manifest)
         return {
             "site_url": target.site_url,
             "list_id": target.list_id,
@@ -364,6 +394,7 @@ class SharePointRestorer:
         self._status_callback(message)
 
     def restore(self, restore_path: Path, target_site_url: str | None = None) -> dict[str, Any]:
+        restore_path = restore_path.expanduser().resolve()
         sources = self._load_sources(restore_path, target_site_url)
         restored: list[dict[str, Any]] = []
         for index, source in enumerate(sources, start=1):
@@ -372,26 +403,29 @@ class SharePointRestorer:
         return {"restored_at": datetime.now(UTC).isoformat(), "list_count": len(restored), "lists": restored}
 
     def _load_sources(self, restore_path: Path, target_site_url: str | None) -> list[RestoreSource]:
-        manifest_path = restore_path if restore_path.name == "manifest.json" else restore_path / "manifest.json"
+        manifest_path = restore_path if restore_path.name == MANIFEST_FILENAME else restore_path / MANIFEST_FILENAME
         if manifest_path.exists():
             manifest = load_json(manifest_path)
             if "lists" in manifest and isinstance(manifest["lists"], list):
                 return [
-                    RestoreSource(list_dir=manifest_path.parent / item["path"], site_url=(target_site_url or item["site_url"]).rstrip("/"))
+                    RestoreSource(
+                        list_dir=_ensure_within(manifest_path.parent, manifest_path.parent / item["path"]),
+                        site_url=(target_site_url or item["site_url"]).rstrip("/"),
+                    )
                     for item in manifest["lists"]
                 ]
             if "paths" in manifest:
                 return [RestoreSource(list_dir=manifest_path.parent, site_url=(target_site_url or manifest["site_url"]).rstrip("/"))]
-        if (restore_path / "list.json").exists():
-            single_manifest = load_json(restore_path / "manifest.json")
+        if (restore_path / LIST_FILENAME).exists():
+            single_manifest = load_json(restore_path / MANIFEST_FILENAME)
             return [RestoreSource(list_dir=restore_path, site_url=(target_site_url or single_manifest["site_url"]).rstrip("/"))]
         raise ValueError(f"Restore path does not contain an export manifest: {restore_path}")
 
     def restore_list(self, source: RestoreSource) -> dict[str, Any]:
-        list_data = load_json(source.list_dir / "list.json")
-        fields = load_json(source.list_dir / "fields.json")
-        items = load_ndjson(source.list_dir / "items.ndjson")
-        attachments = load_json(source.list_dir / "attachments.json")
+        list_data = load_json(source.list_dir / LIST_FILENAME)
+        fields = load_json(source.list_dir / FIELDS_FILENAME)
+        items = load_ndjson(source.list_dir / ITEMS_FILENAME)
+        attachments = load_json(source.list_dir / ATTACHMENTS_FILENAME)
 
         list_title = list_data["Title"]
         escaped_title = escape_odata_value(list_title)
@@ -470,7 +504,7 @@ class SharePointRestorer:
             old_id = int(attachment["item_id"])
             if old_id not in id_map:
                 raise RuntimeError(f"Attachment refers to missing source item id {old_id}")
-            local_path = source.list_dir / attachment["local_path"]
+            local_path = _ensure_within(source.list_dir, source.list_dir / attachment["local_path"])
             self._client.post_bytes(
                 source.site_url,
                 f"{list_api}/Items({id_map[old_id]})/AttachmentFiles/add(FileName='{quote(attachment['file_name'], safe='')}')",

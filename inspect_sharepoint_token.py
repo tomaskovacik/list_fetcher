@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import msal
 
-from list_fetcher.utils import load_dotenv
+from list_fetcher.utils import load_dotenv, require_file
 
 
 def decode_jwt_claims(access_token: str) -> dict:
@@ -23,9 +23,10 @@ def decode_jwt_claims(access_token: str) -> dict:
 
 def build_client_credential(args: argparse.Namespace) -> dict[str, str]:
     if args.cert_path and args.cert_thumbprint:
+        cert_path = require_file(Path(args.cert_path), label="Certificate path")
         return {
             "thumbprint": args.cert_thumbprint,
-            "private_key": Path(args.cert_path).read_text(encoding="utf-8"),
+            "private_key": cert_path.read_text(encoding="utf-8"),
         }
     raise ValueError("Provide both SP_EXPORT_CERT_PATH and SP_EXPORT_CERT_THUMBPRINT.")
 

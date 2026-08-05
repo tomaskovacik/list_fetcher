@@ -58,6 +58,13 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def require_file(path: Path, *, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise ValueError(f"{label} not found: {resolved}")
+    return resolved
+
+
 def discover_site_url(full_url: str) -> str:
     parts = urlsplit(full_url)
     segments = [segment for segment in parts.path.split("/") if segment]
@@ -100,8 +107,9 @@ def parse_list_target(raw: str) -> ListTarget:
 
 
 def load_list_targets_file(path: Path) -> list[ListTarget]:
+    resolved_path = require_file(path, label="List URLs file")
     targets: list[ListTarget] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in resolved_path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue

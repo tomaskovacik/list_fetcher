@@ -5,8 +5,6 @@ import os
 import sys
 from pathlib import Path
 
-import requests
-
 from .models import AuthConfig, ListTarget
 from .sharepoint import EntraTokenProvider, SharePointExporter, SharePointRestClient, SharePointRestorer
 from .utils import load_dotenv, load_list_targets_file
@@ -85,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
             resolved = exporter.resolve_targets(targets)
             manifest = exporter.export(resolved, args.output)
             print(f"Exported {manifest['list_count']} list(s) to {args.output}")
-    except (OSError, RuntimeError, requests.RequestException, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:
