@@ -147,10 +147,10 @@ Restore run:
 docker compose --profile tools run --rm restore
 ```
 
-Find list ids without downloading anything (auth and site URLs are already picked up from `.env` via `env_file`):
+Find list ids without downloading anything: set `LIST_FETCHER_DRY_RUN=true` in `.env`, then run the `download` service as usual - it reuses your existing `LIST_FETCHER_SITE_URLS`/`LIST_FETCHER_LIST_URLS_FILE`/exclusion settings and doesn't require `LIST_FETCHER_OUTPUT_DIR`:
 
 ```bash
-docker compose run --rm --entrypoint list-fetcher download --dry-run --site-url https://contoso.sharepoint.com/sites/finance
+docker compose run --rm download
 ```
 
 Generate a certificate/key pair for SharePoint app-only auth:
@@ -185,6 +185,7 @@ Common `.env` values:
 - `LIST_FETCHER_CERT_FORCE` - overwrite existing files when `true`
 - `LIST_FETCHER_EXCLUDE_LIST_IDS` - comma or newline separated list ids (GUIDs) to exclude from discovery/export
 - `LIST_FETCHER_EXCLUDE_LIST_IDS_FILE` - optional file such as `/config/exclude-list-ids.txt`
+- `LIST_FETCHER_DRY_RUN` - set to `true` to discover and print matching lists instead of downloading them; `LIST_FETCHER_OUTPUT_DIR` is not required in this mode
 
 Host directory and user overrides (Compose only):
 
