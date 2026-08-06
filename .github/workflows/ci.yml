@@ -31,7 +31,7 @@ jobs:
           uv sync --locked
 
       - name: Run unit tests
-        run: uv run --no-sync python -m unittest discover -s tests -q
+        run: uv run --no-sync --no-build python -m unittest discover -s tests -q
 
   docker:
     name: Build Docker image

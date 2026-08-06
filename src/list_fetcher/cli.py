@@ -82,6 +82,46 @@ def build_auth_config(args: argparse.Namespace) -> AuthConfig:
     return config
 
 
+def validate_mode_args(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> tuple[list[ListTarget], set[str]] | None:
+    """Validate CLI args for the selected mode. Returns export mode's (targets, exclude_list_ids), or None for restore mode."""
+    if args.restore_path:
+        if args.dry_run:
+            parser.error("--dry-run cannot be combined with --restore-path.")
+        if args.output or args.site_url or args.list_urls_file:
+            parser.error("Restore mode uses --restore-path and optional --target-site-url only.")
+        return None
+
+    if not args.dry_run and not args.output:
+        parser.error("--output is required for export mode.")
+    try:
+        return collect_targets(args), collect_exclude_list_ids(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+        return None
+
+
+def run_restore(client: SharePointRestClient, args: argparse.Namespace) -> str:
+    restorer = SharePointRestorer(client, status=print_status)
+    manifest = restorer.restore(args.restore_path, target_site_url=args.target_site_url)
+    return f"Restored {manifest['list_count']} list(s) from {args.restore_path}"
+
+
+def run_export(
+    client: SharePointRestClient, args: argparse.Namespace, targets: list[ListTarget], exclude_list_ids: set[str]
+) -> str:
+    exporter = SharePointExporter(
+        client, include_hidden=args.include_hidden, exclude_list_ids=exclude_list_ids, status=print_status
+    )
+    resolved = exporter.resolve_targets(targets)
+    if args.dry_run:
+        print_list_summary(resolved)
+        return f"{len(resolved)} list(s) matched (dry run, nothing downloaded)"
+    manifest = exporter.export(resolved, args.output)
+    return f"Exported {manifest['list_count']} list(s) to {args.output}"
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     parser = build_parser()
@@ -92,37 +132,16 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
-    if args.restore_path:
-        if args.dry_run:
-            parser.error("--dry-run cannot be combined with --restore-path.")
-        if args.output or args.site_url or args.list_urls_file:
-            parser.error("Restore mode uses --restore-path and optional --target-site-url only.")
-    else:
-        if not args.dry_run and not args.output:
-            parser.error("--output is required for export mode.")
-        try:
-            targets = collect_targets(args)
-            exclude_list_ids = collect_exclude_list_ids(args)
-        except ValueError as exc:
-            parser.error(str(exc))
+    export_args = validate_mode_args(args, parser)
 
     client = SharePointRestClient(EntraTokenProvider(auth))
     try:
-        if args.restore_path:
-            restorer = SharePointRestorer(client, status=print_status)
-            manifest = restorer.restore(args.restore_path, target_site_url=args.target_site_url)
-            print(f"Restored {manifest['list_count']} list(s) from {args.restore_path}")
+        if export_args is None:
+            message = run_restore(client, args)
         else:
-            exporter = SharePointExporter(
-                client, include_hidden=args.include_hidden, exclude_list_ids=exclude_list_ids, status=print_status
-            )
-            resolved = exporter.resolve_targets(targets)
-            if args.dry_run:
-                print_list_summary(resolved)
-                print(f"{len(resolved)} list(s) matched (dry run, nothing downloaded)")
-            else:
-                manifest = exporter.export(resolved, args.output)
-                print(f"Exported {manifest['list_count']} list(s) to {args.output}")
+            targets, exclude_list_ids = export_args
+            message = run_export(client, args, targets, exclude_list_ids)
+        print(message)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
