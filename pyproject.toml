@@ -8,7 +8,7 @@ version = "0.3.5"
 description = "Export SharePoint Online lists with schema for backup and later restore work."
 requires-python = ">=3.10"
 dependencies = [
-  "msal>=1.28.0",
+  "msal>=1.38.0",
   "requests>=2.32.0",
 ]
 
